@@ -40,6 +40,7 @@
 #include "video_core/gpu.h"
 #include "video_core/host1x/gpu_device_memory_manager.h"
 #include "video_core/host1x/host1x.h"
+#include "video_core/nx2_profile.h"
 #include "video_core/rasterizer_download_area.h"
 
 namespace Core::Memory {
@@ -909,6 +910,7 @@ struct Memory::Impl {
         if (!gpu_device_memory) [[unlikely]] {
             gpu_device_memory = &system.Host1x().MemoryManager();
         }
+        VideoCommon::Nx2Profile::AddShared(VideoCommon::Nx2Profile::SharedCounter::SlowPathReads, 1);
         const size_t core = system.GetCurrentHostThreadID();
         if (core >= Core::Hardware::NUM_CPU_CORES) {
             // A service thread has no slot in the arrays below, and it does not use a slot of a
@@ -924,7 +926,9 @@ struct Memory::Impl {
             return;
         }
         auto& current_area = rasterizer_read_areas[core];
-        if (const u64 generation = read_trap_generation.load(std::memory_order_acquire);
+        // Both only grow, so the sum changes whenever either does.
+        if (const u64 generation = read_trap_generation.load(std::memory_order_acquire) +
+                                   gpu_device_memory->ReadAreaGeneration();
             read_area_generations[core] != generation) {
             current_area = {};
             read_area_generations[core] = generation;
@@ -935,8 +939,11 @@ struct Memory::Impl {
                 [[likely]] {
                 return;
             }
-            DisarmReadTraps(v_address, size);
+            // Flush first: another core's read of the page must fault until the data is there.
             current_area = system.GPU().OnCPURead(address, size);
+            if (current_area.release_read_trap) {
+                DisarmReadTraps(v_address, size);
+            }
         });
     }
 

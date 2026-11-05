@@ -4,6 +4,7 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstdlib>
 #include <string>
@@ -99,6 +100,10 @@ enum class Counter : u32 {
     AcquireWaits,   ///< Of AcquireChecks: not met yet (the channel waits)
     SkippedDraws,   ///< Draws dropped because a bound native program was rejected
     PipelineMisses, ///< Graphics/compute pipeline cache misses (a new pipeline is created)
+    DownloadFences, ///< Fences that copied buffer data back (each breaks the render pass)
+    SyncDownloads,  ///< Buffer downloads a flush waited for (each waits for the host GPU)
+    HotWriteBytes,  ///< GPU writes queued for download at the next fence (per bind, with repeats)
+    ArmedWriteBytes, ///< GPU writes left to read traps (per bind, with repeats)
     Count,
 };
 
@@ -145,6 +150,19 @@ private:
     u64 parent_child_ns{};
 };
 
+/// Amounts counted on the guest's threads, which never reach Report.
+enum class SharedCounter : u32 {
+    SlowPathReads,       ///< Guest reads of cached pages outside fastmem
+    ReadAreaMisses,      ///< Of those: asked the GPU (takes both cache locks)
+    SyncFlushes,         ///< Of those: waited for a flush on the GPU thread
+    ReadsWithoutGpuData, ///< Of ReadAreaMisses: read no GPU-written bytes
+    PromotedBytes,       ///< Pages added to the buffers' read back ranges
+    ReadAreaInvalidations, ///< GPU writes that made guest threads drop their cached read areas
+    Count,
+};
+
+inline std::array<std::atomic<u64>, static_cast<size_t>(SharedCounter::Count)> g_shared_counters{};
+
 /// Device pages (4 KiB) the native MME has DMA-read since start (GPU thread only; filled only
 /// while profiling): which buffer downloads anything on the GPU thread reads back.
 inline std::unordered_set<u64>& DmaReadPages() {
@@ -155,6 +173,12 @@ inline std::unordered_set<u64>& DmaReadPages() {
 inline void Add(Counter counter, u64 amount) {
     if (Enabled()) {
         t_data.counters[static_cast<size_t>(counter)] += amount;
+    }
+}
+
+inline void AddShared(SharedCounter counter, u64 amount) {
+    if (Enabled()) {
+        g_shared_counters[static_cast<size_t>(counter)].fetch_add(amount, std::memory_order_relaxed);
     }
 }
 
@@ -208,6 +232,25 @@ inline void Report(const char* thread_name = "GPU thread") {
     };
     line += fmt::format(" | draws skipped (rejected program) {:.0f}", rate(Counter::SkippedDraws));
     line += fmt::format(" | pipeline cache misses {:.0f}", rate(Counter::PipelineMisses));
+    line += fmt::format(" | fences with downloads {:.0f}, sync downloads {:.0f}, writes queued for "
+                        "download {:.0f} KiB, left to read traps {:.0f} KiB",
+                        rate(Counter::DownloadFences), rate(Counter::SyncDownloads),
+                        rate(Counter::HotWriteBytes) / 1024.0,
+                        rate(Counter::ArmedWriteBytes) / 1024.0);
+    // Totals since the last report of any thread (with the GPU thread split, two threads report).
+    const auto take_shared = [](SharedCounter counter) {
+        return g_shared_counters[static_cast<size_t>(counter)].exchange(0, std::memory_order_relaxed);
+    };
+    const u64 slow_path_reads = take_shared(SharedCounter::SlowPathReads);
+    const u64 area_misses = take_shared(SharedCounter::ReadAreaMisses);
+    const u64 reads_without_gpu_data = take_shared(SharedCounter::ReadsWithoutGpuData);
+    const u64 sync_flushes = take_shared(SharedCounter::SyncFlushes);
+    const u64 promoted_kib = take_shared(SharedCounter::PromotedBytes) / 1024;
+    const u64 area_invalidations = take_shared(SharedCounter::ReadAreaInvalidations);
+    line += fmt::format(" | guest reads since last report: slow path {}, asked GPU {} ({} without "
+                        "GPU data), waited for flush {}, promoted {} KiB, read areas dropped {}",
+                        slow_path_reads, area_misses, reads_without_gpu_data, sync_flushes,
+                        promoted_kib, area_invalidations);
     LOG_INFO(HW_GPU, "{} per second:{}", thread_name, line);
     data = {};
     data.window_start = now;
