@@ -285,7 +285,7 @@ endif()
 
 if (YUZU_CMD)
     add_subdirectory(yuzu_cmd)
-    set_target_properties(yuzu-cmd PROPERTIES OUTPUT_NAME "eglantine-cli")
+    set_target_properties(yuzu-cmd PROPERTIES OUTPUT_NAME "eden-cli")
 endif()
 
 if (ENABLE_QT)
