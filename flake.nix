@@ -56,6 +56,7 @@
 
           nativeBuildInputs = with pkgs; [
             cmake
+            gcc15 # build fails on gcc 16 it seems
             ninja
             clang
             pkg-config
@@ -137,7 +138,6 @@
           buildPhase = ''
             runHook preBuild
 
-            export CXXFLAGS="$CXXFLAGS -Wno-error" # hopefully this can be removed in future releases
             cmake --build build --parallel $NIX_BUILD_CORES
 
             runHook postBuild
@@ -149,6 +149,7 @@
 
             mkdir -p $out/bin
             cp build/bin/eglantine $out/bin/eglantine
+            cp build/bin/nx2_switches.txt $out/bin/nx2_switches.txt
 
             runHook postInstall
           '';
