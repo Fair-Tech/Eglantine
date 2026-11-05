@@ -25,7 +25,7 @@ on:
         type: boolean
         default: true
       pgo:
-        description: none or both
+        description: none, both or only (the PGO build alone)
         type: string
         default: none
 
@@ -35,6 +35,7 @@ permissions:
 jobs:
   msvc:
     name: windows-x86_64
+    if: inputs.pgo != 'only'
     # Might also need to upgrade that one
     runs-on: windows-2022
     env:
@@ -145,7 +146,7 @@ jobs:
 
   mingw-pgo:
     name: windows-x86_64-pgo
-    if: inputs.pgo == 'both'
+    if: inputs.pgo == 'both' || inputs.pgo == 'only'
     runs-on: windows-2022
     env:
       PLATFORM: windows-x86_64-pgo

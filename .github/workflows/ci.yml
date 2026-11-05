@@ -32,9 +32,9 @@ on:
         options: [all, linux, windows, macos]
         default: all
       pgo:
-        description: Also build the PGO variants
+        description: PGO variants (none, both, or only the PGO builds)
         type: choice
-        options: [none, both]
+        options: [none, both, only]
         default: none
       publish:
         description: Publish the binaries as a GitHub pre-release (otherwise only workflow artifacts)
