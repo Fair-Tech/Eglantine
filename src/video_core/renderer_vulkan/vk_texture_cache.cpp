@@ -1257,14 +1257,11 @@ void UseBc3ForSwitch2(const Device& device) {
         return;
     }
     const char* keep = std::getenv("EDEN_NX2_KEEP_ASTC");
-    if (memory >= 20_GiB || (keep != nullptr && keep[0] == '1')) {
+    if (keep != nullptr && keep[0] == '1') {
         return;
     }
-    LOG_WARNING(Render_Vulkan,
-                "Switch 2 program with a {} MiB video memory budget: ASTC textures are "
-                "re-compressed to BC3 for this session (uncompressed ASTC needs a 20 GiB budget). "
-                "Set EDEN_NX2_KEEP_ASTC=1 to keep them uncompressed",
-                memory >> 20);
+    LOG_WARNING(Render_Vulkan, "Switch 2 program: ASTC textures are re-compressed to BC3 for this "
+                               "session. Set EDEN_NX2_KEEP_ASTC=1 to keep them uncompressed");
     Settings::SetAstcRecompressionOverride(Settings::AstcRecompression::Bc3);
 }
 } // Anonymous namespace

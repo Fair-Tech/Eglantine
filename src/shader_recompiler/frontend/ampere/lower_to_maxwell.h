@@ -1221,13 +1221,14 @@ inline LoweredProgram LowerToMaxwellWith(std::span<const Instruction> code, u32 
             break;
         }
         case 0x98e: { // RED.E.{ADD..XOR}.STRONG.GPU, register or uniform address.
+            const s32 offset = static_cast<s32>(insn.Bits(40, 24) << 8) >> 8;
+            if (offset < -0x80000 || offset > 0x7ffff)
+                return fail(index, "native global reduction mode");
             if ((insn.words[2] & ~0x03800e3fU) == 0x0c10e100 && insn.Bits(24, 8) == 255) {
                 // [URa + offset]: a uniform 64-bit address with a signed byte offset.
                 const u32 address = uniform_register(insn.Bits(64, 6));
                 const u32 type = insn.Bits(73, 3);
-                const s32 offset = static_cast<s32>(insn.Bits(40, 24) << 8) >> 8;
-                if (address == ~0U || (address & 1) || type > 5 || insn.Bits(32, 8) >= 250 ||
-                    offset < -0x80000 || offset > 0x7ffff)
+                if (address == ~0U || (address & 1) || type > 5 || insn.Bits(32, 8) >= 250)
                     return fail(index, "native global reduction uniform address");
                 emit(0xebf8000000000000ULL | predicate | insn.Bits(32, 8) | (u64{address} << 8) |
                      (u64{type} << 20) |
@@ -2615,8 +2616,8 @@ inline LoweredProgram LowerToMaxwellWith(std::span<const Instruction> code, u32 
             }
             break;
         }
-        case 0x598: case 0x599: case 0x59a: case 0x59b: case 0x59c: case 0x59d: case 0x59e:
-        case 0x59f: { // FFMA with register sources (docs/NvidiaGpu.md: FFMA_reg `0101 1001 1--- ----`)
+        case 0x598: case 0x599: case 0x59a: case 0x59b: case 0x59c: case 0x59d:
+        case 0x59e: { // FFMA with register sources (0x59f is SURED, lowered above) (docs/NvidiaGpu.md: FFMA_reg `0101 1001 1--- ----`)
             // In this family the low three bits of the opcode are the source form selector, not
             // bits 9-11 like the 0x223/0x423 forms: 0x598 is form 0 and 0x59f is form 7, which is
             // what operand() has to be told, otherwise it decodes the wrong operand layout.

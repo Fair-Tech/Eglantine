@@ -1779,7 +1779,8 @@ Errno BSD_USA::BindImpl(s32 fd, std::span<const u8> addr) {
     if (descriptor->domain == Domain::INET && descriptor->type == Type::DGRAM &&
         (descriptor->protocol == Protocol::IP || descriptor->protocol == Protocol::UDP) &&
         translated_addr.portno == 12345 && translated_addr.ip[0] != 127 &&
-        descriptor->socket->GetFD() != Network::SocketBase::INVALID_SOCKET &&
+        // INVALID_SOCKET is all bits set on every platform (a Winsock macro on Windows).
+        descriptor->socket->GetFD() != static_cast<decltype(descriptor->socket->GetFD())>(~0) &&
         Network::GetRoomIPv4Address()) {
         auto proxy = std::make_shared<Network::ProxySocket>();
         const auto error =
