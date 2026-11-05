@@ -180,7 +180,7 @@ constexpr VkBorderColor ConvertBorderColor(const std::array<float, 4>& color) {
         return false;
     }
     constexpr u32 MinSize = 32U << 20;
-    const u32 size = VideoCommon::CalculateGuestSizeInBytes(info);
+    const u64 size = VideoCommon::CalculateGuestSizeInBytes(info);
     return size >= MinSize && info.type != ImageType::e1D && info.type != ImageType::Buffer &&
            info.type != ImageType::Linear && Tegra::Nx2SparseUnwritten(gpu_addr, size);
 }
@@ -200,7 +200,7 @@ constexpr VkBorderColor ConvertBorderColor(const std::array<float, 4>& color) {
         IsHugeAstcArray(device, info) ||
         (!IsPixelFormatASTC(info.format) &&
          (!IsPixelFormatBCn(info.format) || device.IsOptimalBcnSupported()));
-    const u32 size = VideoCommon::CalculateGuestSizeInBytes(info);
+    const u64 size = VideoCommon::CalculateGuestSizeInBytes(info);
     return layer_uploads && size >= (32U << 20) && Tegra::Nx2InSparseRegion(gpu_addr, size);
 }
 
@@ -223,7 +223,7 @@ constexpr VkBorderColor ConvertBorderColor(const std::array<float, 4>& color) {
         return false;
     }
     constexpr u32 MinSize = 256U << 20;
-    const u32 size = VideoCommon::CalculateGuestSizeInBytes(info);
+    const u64 size = VideoCommon::CalculateGuestSizeInBytes(info);
     return size >= MinSize && Tegra::Nx2InSparseRegion(gpu_addr, size);
 }
 
@@ -266,7 +266,7 @@ enum class SparseTilesMode {
         VideoCore::Surface::GetFormatType(info.format) != VideoCore::Surface::SurfaceType::ColorTexture) {
         return false;
     }
-    const u32 size = VideoCommon::CalculateGuestSizeInBytes(info);
+    const u64 size = VideoCommon::CalculateGuestSizeInBytes(info);
     return size >= (32U << 20) && Tegra::Nx2InSparseRegion(gpu_addr, size);
 }
 
@@ -829,18 +829,24 @@ TransformBufferCopies(std::span<const VideoCommon::BufferCopy> copies, size_t bu
     };
 }
 
-// A guest view's levels on a host image that keeps only levels >= host_level_offset.
-[[nodiscard]] SubresourceRange HostRange(const Image& image, SubresourceRange range) {
-    const s32 skip = static_cast<s32>(image.host_level_offset);
+// A guest view's levels on a host image of `levels` guest levels that keeps only levels >=
+// host_level_offset.
+[[nodiscard]] SubresourceRange HostRange(u32 host_level_offset, s32 levels,
+                                         SubresourceRange range) {
+    const s32 skip = static_cast<s32>(host_level_offset);
     if (skip == 0) {
         return range;
     }
-    const s32 host_levels = image.info.resources.levels - skip;
+    const s32 host_levels = levels - skip;
     const s32 base = std::clamp(range.base.level - skip, 0, host_levels - 1);
     const s32 end = std::clamp(range.base.level + range.extent.levels - skip, base + 1, host_levels);
     range.base.level = base;
     range.extent.levels = end - base;
     return range;
+}
+
+[[nodiscard]] SubresourceRange HostRange(const Image& image, SubresourceRange range) {
+    return HostRange(image.host_level_offset, image.info.resources.levels, range);
 }
 
 [[nodiscard]] VkImageSubresourceRange MakeSubresourceRange(const ImageView* image_view) {
@@ -4050,6 +4056,7 @@ ImageView::ImageView(TextureCacheRuntime& runtime, const VideoCommon::ImageViewI
                      ImageId image_id_, Image& image)
     : VideoCommon::ImageViewBase{info, image.info, image_id_, image.gpu_addr},
       device{&runtime.device}, image_handle{image.Handle()},
+      host_level_offset{image.host_level_offset}, image_levels{image.info.resources.levels},
       samples(ConvertSampleCount(image.info.num_samples)) {
     using Shader::TextureType;
 
@@ -4180,7 +4187,7 @@ ImageView::ImageView(TextureCacheRuntime& runtime, const VideoCommon::ImageViewI
 ImageView::ImageView(TextureCacheRuntime& runtime, const VideoCommon::ImageInfo& info,
                      const VideoCommon::ImageViewInfo& view_info, GPUVAddr gpu_addr_)
     : VideoCommon::ImageViewBase{info, view_info, gpu_addr_},
-      buffer_size{VideoCommon::CalculateGuestSizeInBytes(info)} {}
+      buffer_size{static_cast<u32>(VideoCommon::CalculateGuestSizeInBytes(info))} {}
 
 ImageView::ImageView(TextureCacheRuntime& runtime, const VideoCommon::NullImageViewParams& params)
     : VideoCommon::ImageViewBase{params}, device{&runtime.device} {
@@ -4266,7 +4273,8 @@ bool ImageView::IsRescaled() const noexcept {
 vk::ImageView ImageView::MakeView(VkFormat vk_format, VkImageAspectFlags aspect_mask,
                                   std::optional<Shader::TextureType> texture_type) {
     VkImageViewType view_type = ImageViewType(type);
-    VkImageSubresourceRange subresource_range = MakeSubresourceRange(aspect_mask, range);
+    VkImageSubresourceRange subresource_range =
+        MakeSubresourceRange(aspect_mask, HostRange(host_level_offset, image_levels, range));
     const auto is_3d = [](VkImageViewType t) { return t == VK_IMAGE_VIEW_TYPE_3D; };
     if (texture_type && is_3d(ImageViewType(*texture_type)) != is_3d(view_type)) {
         // A 3D view of a 2D image (or the reverse) is invalid in Vulkan and aborts on Metal; keep
