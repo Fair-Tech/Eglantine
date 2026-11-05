@@ -1364,15 +1364,17 @@ inline LoweredProgram LowerToMaxwellWith(std::span<const Instruction> code, u32 
                 (u64{insn.Bits(73, 1)} << 28) | (u64{offset >> 2} << 30) | (u64{operation} << 52));
             break;
         }
-        case 0x3a8: { // ATOMG.E.ADD.STRONG.GPU U32 at a 64-bit register address plus an offset.
-            const u32 address = insn.Bits(24, 8);
+        case 0x3a8: { // ATOMG.E.<op>.STRONG.GPU U32 at a 64-bit register address plus an offset.
+            // The operation (bits 87-90: ADD, MIN, MAX, INC, DEC, AND, OR, XOR, EXCH) keeps its
+            // number in Maxwell's ATOM (bits 52-55).
+            const u32 address = insn.Bits(24, 8), atom_op = insn.Bits(87, 4);
             const s32 offset = static_cast<s32>(insn.Bits(40, 24) << 8) >> 8;
-            if (insn.words[2] != 0x001ee100 || (address & 1) || address >= 246 ||
-                offset < -0x80000 || offset > 0x7ffff)
+            if ((insn.words[2] & ~0x07800000U) != 0x001ee100 || atom_op > 8 || (address & 1) ||
+                address >= 246 || offset < -0x80000 || offset > 0x7ffff)
                 return fail(index, "native global atomic register mode");
             emit(0xed00000000000000ULL | predicate | dest | (u64{address} << 8) |
                 (u64{insn.Bits(32, 8)} << 20) | (u64{static_cast<u32>(offset) & 0xfffff} << 28) |
-                (u64{1} << 48));
+                (u64{1} << 48) | (u64{atom_op} << 52));
             break;
         }
         case 0x9a8: { // ATOMG.E.ADD.STRONG.GPU U32 through a uniform pointer plus an offset.
@@ -1483,12 +1485,12 @@ inline LoweredProgram LowerToMaxwellWith(std::span<const Instruction> code, u32 
             }
             if (!shift_operand || insn.Bits(73, 2) != 3 || shift == ~0U ||
                 (insn.words[2] & ~(0x000118ffU | (opcode == 0xc19 ? 0x08000000U : 0U))) != 0x00000600U ||
-                (right ? (!high_result || low != 255) : (high_result || high != 255)))
+                (right ? (!high_result || low != 255) : (high_result ? low != 255 : high != 255)))
                 return fail(index, "native register shift mode");
             load_shift();
             emit(base(right ? 0x5cf8000000000000ULL : 0x5bf8000000000000ULL) |
                 (u64{right ? high : 255U} << 8) | (u64{shift} << 20) |
-                (u64{right ? 255U : low} << 39) | (u64{insn.Bits(75, 1)} << 50));
+                (u64{right ? 255U : (high_result ? high : low)} << 39) | (u64{insn.Bits(75, 1)} << 50));
             break;
         }
         case 0x300: case 0xd00: { // FLO, including a uniform source.

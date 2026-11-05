@@ -39,6 +39,8 @@
 #include "core/perf_stats.h"
 #include "video_core/gpu.h"
 #include "video_core/framebuffer_config.h"
+#include "video_core/engines/maxwell_3d.h"
+#include "video_core/memory_manager.h"
 #include "core/core_timing.h"
 #include "core/hle/kernel/k_client_session.h"
 #include "core/hle/kernel/k_process.h"
@@ -437,8 +439,9 @@ private:
         TipcReplyWords(ctx, {~0U, ~0U, 0, 0});
     }
 
-    // Fire Emblem: Fortune's Weave: 41(name u64, flags u64, debug label u64) returns a device id
-    // that later NvRm calls name; 0 is not a valid id. Only flags 0 has been seen.
+    // Fire Emblem: Fortune's Weave and the Yoshi demo: 41(name u64, flags u64, debug label u64)
+    // returns a device id that later NvRm calls name; 0 is not a valid id (the Yoshi demo's NVN
+    // gave up on the device, 2162-0001). Only flags 0 has been seen.
     void CreateGraphicsDevice(HLERequestContext& ctx) {
         const auto* b = ctx.CommandBuffer();
         const u64 name = u64{b[2]} | (u64{b[3]} << 32);
@@ -523,7 +526,7 @@ private:
             // Also at the memory's own address: an earlier 213 may have unmapped the mapping 101
             // made there.
             const u64 cpu = it->second.address + c;
-            Nvidia::Devices::Nx2GpuMemoryRegistry::Get().MapAt(a, cpu, b - a + 1);
+            Nvidia::Devices::Nx2GpuMemoryRegistry::Get().MapAt(handle, c, a, cpu, b - a + 1);
         } else {
             LOG_WARNING(Service, "nx2:gpu 211 map of unknown handle {}", handle);
         }
@@ -1472,6 +1475,8 @@ struct Nx2NativeObjects {
     struct Memory {
         u64 size{};
         u64 address{}; // CPU (== GPU) address once bound by 114/423
+        u32 parent{};
+        u64 parent_offset{};
     };
     struct Image {
         u32 memory{};
@@ -1973,6 +1978,9 @@ private:
     // into from the image's top-left corner (0 when it gives none).
     void Composite(u32 image_id, u32 fence_id, u32 fence_value, u32 shown_size) {
         u64 address{};
+        u32 parent{};
+        u64 parent_offset{};
+        u64 image_offset{};
         Nx2ImageLayout layout{};
         u32 image_format{};
         {
@@ -1986,10 +1994,32 @@ private:
                 return;
             }
             address = memory->second.address;
+            parent = memory->second.parent;
+            parent_offset = memory->second.parent_offset;
+            image_offset = image->second.offset;
             layout = Nx2CalculateImageLayout(image->second.preference.data());
             image_format = image->second.preference[6];
         }
-        const auto device = Nvidia::Devices::Nx2GpuMemoryRegistry::Get().DeviceAddressOf(address);
+        std::optional<u64> device;
+        if (parent != 0) {
+            if (const auto gpu = Nvidia::Devices::Nx2GpuMemoryRegistry::Get().GpuAddressOf(
+                    parent, parent_offset + image_offset)) {
+                device = system.GPU().Maxwell3D().GetMemoryManager().GpuToCpuAddress(*gpu);
+            }
+        }
+        const auto fallback_device =
+            Nvidia::Devices::Nx2GpuMemoryRegistry::Get().DeviceAddressOf(address);
+        if (device && fallback_device && *device != *fallback_device) {
+            static std::atomic<u32> logged{0};
+            if (logged.fetch_add(1, std::memory_order_relaxed) < 4) {
+                LOG_INFO(Service,
+                         "nx2:vi2 composite device address mismatch: gpu={:#x} fallback={:#x}",
+                         *device, *fallback_device);
+            }
+        }
+        if (!device) {
+            device = fallback_device;
+        }
         if (!device) {
             LOG_WARNING(Service, "nx2:vi2 present: image {} at {:#x} has no device mapping",
                         image_id, address);
@@ -3461,14 +3491,17 @@ private:
     void BindNativeGpuMemory(HLERequestContext& ctx) {
         const auto* w = ctx.CommandBuffer();
         LOG_DEBUG(Service, "nx2:gsv 423 parent={} offset={:#x}", w[7], Pair(w, 8));
-        BindMemory(w[2], Pair(w, 3), Pair(w, 5), "423");
+        BindMemory(w[2], Pair(w, 3), Pair(w, 5), "423", w[7], Pair(w, 8));
         TipcReplyWords(ctx, {});
     }
 
-    void BindMemory(u32 id, u64 address, u64 size, const char* command) {
+    void BindMemory(u32 id, u64 address, u64 size, const char* command, u32 parent = 0,
+                    u64 parent_offset = 0) {
         std::scoped_lock lk{m_objects->mutex};
         auto& memory = m_objects->memories[id];
         memory.address = address;
+        memory.parent = parent;
+        memory.parent_offset = parent_offset;
         if (memory.size == 0) {
             memory.size = size;
         }
