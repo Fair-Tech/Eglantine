@@ -244,7 +244,7 @@ public:
     }
 
     bool IsNativeMode() const { return native_mode; }
-    /// Whether the dispatch being run is a pass of a game DLSS evaluation (Fortune's Weave).
+    /// Whether the current native dispatch belongs to a recognized game DLSS evaluation.
     bool IsDlssDispatch() const { return native_mode && dlss_chain.active; }
     /// Whether the matrix multiplies (tensor-core instructions) of the program being dispatched
     /// are emulated: in a game DLSS evaluation when the game's own network may draw, and always
