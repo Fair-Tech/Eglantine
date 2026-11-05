@@ -143,6 +143,11 @@ endif()
 
 if (ENABLE_LIBUSB)
     add_subdirectory(libusb)
+    # SDL3 links its static library to this target when built with HIDAPI over libusb, and SDL
+    # always exports that library's build tree, so the target must be exported as well.
+    if (TARGET usb)
+        export(TARGETS usb NAMESPACE libusb:: FILE "${CMAKE_CURRENT_BINARY_DIR}/libusbTargets.cmake")
+    endif()
     if (NOT TARGET libusb::usb)
         find_package(libusb REQUIRED)
     endif()
