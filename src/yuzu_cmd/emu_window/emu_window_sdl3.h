@@ -99,9 +99,6 @@ protected:
     SDL_TimerID titlebar_timer;
     std::atomic<std::string*> pending_title{};
 
-    /// User event type handled on the main thread to refresh the titlebar
-    Uint32 titlebar_event = 0;
-
     // Mouse resetter once it
     SDL_TimerID mouse_timer;
 
