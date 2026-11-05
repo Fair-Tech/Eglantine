@@ -3012,6 +3012,9 @@ std::optional<typename TextureCache<P>::BlitImages> TextureCache<P>::GetBlitImag
     const GPUVAddr src_addr = src.Address();
     ImageInfo dst_info(dst);
     ImageInfo src_info(src);
+    if (g_blit_source_format) {
+        src_info.format = *g_blit_source_format;
+    }
     const bool can_be_depth_blit =
         dst_info.format == src_info.format && copy.filter == Tegra::Engines::Fermi2D::Filter::Point;
     ImageId dst_id;
