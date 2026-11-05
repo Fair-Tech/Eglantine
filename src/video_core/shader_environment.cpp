@@ -36,6 +36,8 @@
 #include "shader_recompiler/frontend/ampere/program_address_map.h"
 #include "video_core/engines/kepler_compute.h"
 #include "video_core/memory_manager.h"
+#include "video_core/mkw_wave_workaround.h"
+#include "video_core/nx2_diag.h"
 #include "video_core/shader_environment.h"
 #include "video_core/texture_cache/format_lookup_table.h"
 #include "video_core/textures/texture.h"
@@ -477,6 +479,10 @@ std::shared_ptr<const LoweredNativeCode> GenericEnvironment::LowerNativeCode(u32
         reject_list.find(fmt::format(",{:x},", program_base)) != std::string::npos) {
         throw Shader::RuntimeError("Native shader at {:#x} rejected by EDEN_NX2_REJECT", program_base);
     }
+    if (VideoCommon::Nx2Diag::Active()) {
+        VideoCommon::Nx2Diag::Diagnostics::Get().RegisterProgram(
+            program_base, Shader::Ampere::NativeProgramKey(native));
+    }
     // EDEN_NX2_SHADER_DUMP=<dir>: keep every captured native program (named by its key) so the
     // lowering can be tested offline against all of a game's shaders.
     if (static const char* const dump_directory = std::getenv("EDEN_NX2_SHADER_DUMP");
@@ -551,6 +557,10 @@ std::shared_ptr<const LoweredNativeCode> GenericEnvironment::LowerNativeCode(u32
             program_base, lowered.error_offset, lowered.error, words[0] & 0xfff, words[0],
             words[1], words[2], words[3]);
     }
+    if (const char* enabled = std::getenv("EDEN_MKW_ZERO_DEPTH_FALLBACK");
+        enabled != nullptr && enabled[0] == '1') {
+        VideoCommon::ApplyMkwZeroDepthFallback(native, lowered);
+    }
     auto result = std::make_shared<LoweredNativeCode>();
     static const bool hash_for_indirect_reset = [] {
         const char* value = std::getenv("EDEN_NX2_RESETFIX");
@@ -559,6 +569,7 @@ std::shared_ptr<const LoweredNativeCode> GenericEnvironment::LowerNativeCode(u32
     if (hash_for_indirect_reset) {
         result->diagnostic_key = Shader::Ampere::NativeProgramKey(native);
     }
+    result->native_key = Shader::Ampere::NativeProgramKey(native);
     result->texture_bound = lowered.required_texture_buffer;
     result->source_size = native_header_size + lowered.source_size;
     auto& lowered_code = result->code;

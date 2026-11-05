@@ -118,9 +118,14 @@ public:
     [[nodiscard]] GraphicsPipeline* CurrentGraphicsPipeline();
     [[nodiscard]] bool IsIndirectResetShader() const;
 
+    /// Why the last CurrentGraphicsPipeline() returned null (diagnostics).
+    [[nodiscard]] const char* GraphicsMissReason() const noexcept {
+        return graphics_miss;
+    }
+
     void TickFrame();
 
-    [[nodiscard]] ComputePipeline* CurrentComputePipeline();
+    [[nodiscard]] ComputePipeline* CurrentComputePipeline(u64& native_key);
 
     void LoadDiskResources(u64 title_id, std::stop_token stop_loading,
                            const VideoCore::DiskResourceLoadCallback& callback);
@@ -172,6 +177,7 @@ private:
 
     GraphicsPipelineCacheKey graphics_key{};
     GraphicsPipeline* current_pipeline{};
+    mutable const char* graphics_miss{"no-pipeline"};
 
     /// Destroys graphics pipelines unused for a while, once the GPU is done with them.
     void EvictUnusedPipelines();
