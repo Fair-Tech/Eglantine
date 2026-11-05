@@ -452,4 +452,40 @@ Result ISelfController::Unknown240(u32 in_val) {
     R_SUCCEED();
 }
 
+Result ISelfController::SetRecordingLayerEnabled() {
+    LOG_WARNING(Service_AM, "(STUBBED) called");
+
+    R_SUCCEED();
+}
+
+Result ISelfController::SetSharingLayerEnabled() {
+    LOG_WARNING(Service_AM, "(STUBBED) called");
+
+    R_SUCCEED();
+}
+
+Result ISelfController::SetCopyrightLayerEnabled() {
+    LOG_WARNING(Service_AM, "(STUBBED) called");
+
+    R_SUCCEED();
+}
+
+Result ISelfController::SetRtcScreenSharingAudioEnabled() {
+    LOG_WARNING(Service_AM, "(STUBBED) called");
+
+    R_SUCCEED();
+}
+
+Result ISelfController::SetStreamPlayMirroringAudioEnabled() {
+    LOG_WARNING(Service_AM, "(STUBBED) called");
+
+    R_SUCCEED();
+}
+
+Result ISelfController::Unknown2402() {
+    LOG_WARNING(Service_AM, "(STUBBED) called");
+
+    R_SUCCEED();
+}
+
 } // namespace Service::AM
