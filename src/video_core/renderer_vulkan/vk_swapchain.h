@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <vector>
 
 #include "common/common_types.h"
@@ -30,11 +31,12 @@ public:
         u32 height);
     ~Swapchain();
 
-    /// Creates (or recreates) the swapchain with a given size.
-    void Create(
+    /// Creates (or recreates) the swapchain; returns false when deferred for zero extent.
+    bool Create(
         VkSurfaceKHR_T* surface,
         u32 width,
-        u32 height);
+        u32 height,
+        VkFormat requested_format = VK_FORMAT_B8G8R8A8_UNORM);
 
     /// Acquires the next image in the swapchain, waits as needed. Returns true when no image was
     /// acquired (out of date) and the swapchain has to be recreated first.
@@ -96,6 +98,14 @@ public:
         return surface_format.format;
     }
 
+    VkFormat GetSdrImageFormat() const {
+        return sdr_image_format.load();
+    }
+
+    VkFormat GetRequestedFormat() const {
+        return requested_format;
+    }
+
     VkSemaphore CurrentPresentSemaphore() const {
         return *present_semaphores[frame_index];
     }
@@ -148,12 +158,15 @@ private:
     VkExtent2D extent{};
     VkPresentModeKHR present_mode{};
     VkSurfaceFormatKHR surface_format{};
+    std::atomic<VkFormat> sdr_image_format{VK_FORMAT_B8G8R8A8_UNORM};
+    VkFormat requested_format{VK_FORMAT_B8G8R8A8_UNORM};
     bool has_imm{false};
     bool has_mailbox{false};
     bool has_fifo_relaxed{false};
 
     bool is_outdated{};
     bool is_suboptimal{};
+    bool hdr_format_unavailable{};
 };
 
 } // namespace Vulkan
