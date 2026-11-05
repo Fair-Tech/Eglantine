@@ -184,6 +184,7 @@ jobs:
       !contains(needs.*.result, 'cancelled')
     permissions:
       contents: write
+      actions: read
     uses: ./.github/workflows/release.yml
     secrets:
       DISCORD_WEBHOOK_URL: ${{ github.event_name != 'pull_request' && secrets.DISCORD_WEBHOOK_URL || '' }}

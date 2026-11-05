@@ -36,6 +36,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   release:
@@ -77,6 +78,25 @@ jobs:
         with:
           pattern: eglantine-*-${{ inputs.sha }}
           path: artifacts
+
+      # With a single matching artifact (e.g. a PGO-only build), download-artifact unpacks it
+      # straight into artifacts/ instead of artifacts/<name>/; put it back in its own folder.
+      - name: Keep a single artifact in its own folder
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob dotglob
+          dirs=(artifacts/eglantine-*-"$SHA"/)
+          if ((${#dirs[@]} == 0)); then
+            name=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" \
+              --jq ".artifacts[] | select(.name | endswith(\"-$SHA\")) | .name" | head -n1)
+            [ -n "$name" ] || { echo "No artifact found for $SHA" >&2; exit 1; }
+            staging=$(mktemp -d)
+            mv artifacts/* "$staging"/
+            mkdir -p "artifacts/$name"
+            mv "$staging"/* "artifacts/$name"/
+            echo "Moved the single artifact into artifacts/$name"
+          fi
 
       # Asset names drop the commit sha: the tag already identifies the build, and stable names let
       # the notes table link to them. (Not named dist/: the repository has one.)
