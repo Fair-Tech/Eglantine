@@ -1799,6 +1799,10 @@ void BufferCache<P>::MarkWrittenBuffer(BufferId buffer_id, DAddr device_addr, u3
     MarkVertexBuffersStale(device_addr, size);
     gpu_modified_ranges.Add(device_addr, size);
     TrackGpuWrite(device_addr, size);
+    if (Tegra::g_nx2_ampere.load(std::memory_order_relaxed)) {
+        Tegra::Nx2MarkGpuWritten(device_addr, size);
+        Nx2NoteListWrite(buffer_id, device_addr, size);
+    }
 }
 
 template <class P>
@@ -1829,10 +1833,6 @@ void BufferCache<P>::TrackGpuWrite(DAddr device_addr, u64 size) {
     });
     if (cursor < device_addr + size) {
         arm(cursor, device_addr + size);
-    }
-    if (Tegra::g_nx2_ampere.load(std::memory_order_relaxed)) {
-        Tegra::Nx2MarkGpuWritten(device_addr, size);
-        Nx2NoteListWrite(buffer_id, device_addr, size);
     }
 }
 

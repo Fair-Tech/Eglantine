@@ -237,7 +237,7 @@ jobs:
       - name: Build
         shell: msys2 {0}
         run: |
-          cmake --build build/release --target yuzu yuzu-cmd --parallel
+          cmake --build build/release --target yuzu yuzu-cmd --parallel -- -k 0
           ccache --show-stats
 
       # A dynamic MinGW build is not portable on its own: windeployqt6 brings the Qt libraries and
