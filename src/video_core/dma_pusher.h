@@ -194,7 +194,6 @@ private:
     /// suspended the channel.
     size_t ProcessCommands(std::span<const CommandHeader> commands, size_t word_offset = 0);
     size_t command_resume_offset{}; ///< Words of the current entry done before a suspension
-    size_t copied_prefix_words{};
 
     void SetState(const CommandHeader& command_header);
 
@@ -267,10 +266,8 @@ public:
         bool non_incrementing;
         bool increment_once;
         GPUVAddr resume_address; ///< Where the entry that continues the method starts
-        bool from_previous_submission{};
     };
-    void ResolveSplitMethod(GPUVAddr entry_address, bool park);
-    [[nodiscard]] bool SplitMethodResumesLater(const CommandList& command_list);
+    void ResolveSplitMethod(GPUVAddr entry_address);
     static constexpr size_t MaxParkedMethods = 16;
 
     // Debug aid: hashes of the words of the last entries as they were parsed.
@@ -297,7 +294,6 @@ public:
     bool dma_increment_once : 1 = false;
     bool signal_sync : 1 = false;
     bool synced : 1 = false;
-    const bool keeps_snapshot_after_suspension;
 };
 
 } // namespace Tegra
