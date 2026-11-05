@@ -142,7 +142,7 @@ IHidServer::IHidServer(Core::System& system_, std::shared_ptr<ResourceManager> r
         {211, C<&IHidServer::IsVibrationDeviceMounted>, "IsVibrationDeviceMounted"},
         {212, C<&IHidServer::SendVibrationValueInBool>, "SendVibrationValueInBool"},
         {213, C<&IHidServer::SendNx2VibrationValue>, "SendVibrationValueInMode"},
-        {214, C<&IHidServer::SendNx2VibrationValues>, "SendVibrationValuesInMode"},
+        {214, C<&IHidServer::SendVibrationValuesInMode>, "SendVibrationValuesInMode"},
         {220, C<&IHidServer::IsOunceVibrationDeviceMounted>, "IsOunceVibrationDeviceMounted"},
         {300, C<&IHidServer::ActivateConsoleSixAxisSensor>, "ActivateConsoleSixAxisSensor"},
         {301, C<&IHidServer::StartConsoleSixAxisSensor>, "StartConsoleSixAxisSensor"},

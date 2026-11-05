@@ -1430,7 +1430,8 @@ inline LoweredProgram LowerToMaxwellWith(std::span<const Instruction> code, u32 
             const u32 source = insn.Bits(24, 8), target = uniform_register(static_cast<u32>(dest));
             const u32 operation = insn.words[2] & ~0x200U;
             const bool maximum = operation == 0x14000, minimum = operation == 0x10000;
-            const bool signed_compare = insn.Bits(73, 1) && (minimum || maximum);
+            const bool signed_order = insn.Bits(73, 1);
+            const bool signed_compare = signed_order && (minimum || maximum);
             // OR and XOR: inactive lanes contribute zero, as for the sum. Maxwell LOP: 1 = OR, 2 = XOR.
             const u32 logical = insn.words[2] == 0x4000 ? 1U : insn.words[2] == 0x8000 ? 2U : 0U;
             if (target == ~0U || target == 255 || insn.words[1] ||
